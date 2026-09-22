@@ -1,0 +1,32 @@
+# Python cache and local environments
+__pycache__/
+*.py[cod]
+.venv/
+venv/
+env/
+.env
+
+# Trained weights and generated training artifacts
+*.pth
+checkpoints/**
+!checkpoints/.gitkeep
+outputs/**
+!outputs/.gitkeep
+experiments/**
+!experiments/.gitkeep
+
+# Generated single-sample files; keep only its documentation
+single_sample/**
+!single_sample/README.md
+
+# External datasets may have separate redistribution licenses
+data_external/
+
+# Project source PDF may contain personal contact information
+docs/南开大学_基于多模态感知与云端机器学习的大棚西瓜生长监测模型的研究.pdf
+
+# Local editor and operating-system files
+.idea/
+.vscode/
+.DS_Store
+Thumbs.db
