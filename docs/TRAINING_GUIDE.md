@@ -1,5 +1,7 @@
 # 大棚西瓜多模态模型训练指南
 
+> 当前交接版本请优先阅读 `docs/HANDOFF_GUIDE.md` 和 `experiments/final_experiment_summary.md`。本文件保留完整训练流程说明；当前推荐模型为 `checkpoints/final_weak_supervised_baseline/best_model.pth`，来源于 `exp007_masked_multitask_training`。
+
 ## 1. 这份文档的作用
 
 本文档用于指导从 GitHub 仓库开始，完成环境安装、模拟数据自检、真实数据训练、模型评估和单样本推理。
@@ -121,6 +123,8 @@ python scripts\train.py --config configs\train.yaml --dry-run
 | 参数 | 作用 |
 |---|---|
 | `--dataset-dir` | 指定数据集目录 |
+| `--labels-file` | 指定标签文件，例如 `dataset_fused\labels_masked.csv` |
+| `--split-file` | 指定划分文件，例如 `dataset_fused\split_source_aware.csv` |
 | `--epochs` | 指定训练轮数 |
 | `--batch-size` | 指定 batch size |
 | `--lr` | 指定学习率 |
@@ -132,6 +136,15 @@ python scripts\train.py --config configs\train.yaml --dry-run
 | `--window-hours` | 指定环境数据历史窗口 |
 | `--image-size` | 指定图像尺寸 |
 | `--label-smoothing` | 指定标签平滑系数 |
+| `--input-mode` | 指定输入模式：`multimodal`、`image_only`、`env_only` |
+
+当前融合数据集训练建议使用：
+
+```powershell
+python scripts\train.py --config configs\train.yaml --dataset-dir dataset_fused --labels-file dataset_fused\labels_masked.csv --split-file dataset_fused\split_source_aware.csv --input-mode multimodal --epochs 30 --batch-size 16 --lr 0.0001 --weight-decay 0.0001 --label-smoothing 0.05 --checkpoint-dir checkpoints\exp_new --device auto
+```
+
+其中 `labels_masked.csv` 带有 task mask，能让弱监督样本只在可信任务上参与训练。
 
 训练时，脚本会把最终生效配置保存为：
 

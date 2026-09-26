@@ -22,6 +22,8 @@ from src.datasets.watermelon_dataset import (
     parse_timestamp,
 )
 from src.models import MultimodalWatermelonModel
+from src.models import TaskOutputDims
+from src.utils.config import deep_merge, load_config
 
 
 CLASS_NAMES = {
@@ -62,6 +64,7 @@ def read_environment_window(
     environment_path: Path,
     capture_time_text: str,
     window_hours: int,
+    environment_fields: tuple[str, ...] = ENV_FIELDS,
 ) -> tuple[torch.Tensor, torch.Tensor, dict[str, Any]]:
     if window_hours <= 0:
         raise ValueError("--window-hours must be positive")
@@ -71,7 +74,7 @@ def read_environment_window(
     if not rows:
         raise ValueError("environment.csv is empty")
 
-    required_fields = {"timestamp", *ENV_FIELDS}
+    required_fields = {"timestamp", *environment_fields}
     missing_fields = required_fields - set(rows[0])
     if missing_fields:
         raise ValueError(f"environment.csv missing fields: {sorted(missing_fields)}")
@@ -79,7 +82,7 @@ def read_environment_window(
     parsed_rows = sorted(
         (
             parse_timestamp(row["timestamp"]),
-            [float(row[field]) for field in ENV_FIELDS],
+            [float(row[field]) for field in environment_fields],
         )
         for row in rows
     )
@@ -111,7 +114,25 @@ def read_environment_window(
     return values, time_offsets, metadata
 
 
-def load_model(checkpoint_path: Path, device: torch.device) -> tuple[MultimodalWatermelonModel, Any]:
+def build_model(config: dict[str, Any]) -> MultimodalWatermelonModel:
+    model_config = config["model"]
+    task_config = model_config["output_tasks"]
+    task_dims = TaskOutputDims(
+        growth_stage=int(task_config["growth_stage"]),
+        health_level=int(task_config["health_level"]),
+        maturity_level=int(task_config["maturity_level"]),
+        abnormal_alert=int(task_config["abnormal_alert"]),
+    )
+    return MultimodalWatermelonModel(
+        sensor_dim=int(model_config["sensor_dim"]),
+        time_dim=int(model_config["time_feature_dim"]),
+        task_dims=task_dims,
+        image_pretrained=bool(model_config["image_pretrained"]),
+        input_mode=str(model_config.get("input_mode", "multimodal")),
+    )
+
+
+def load_model(checkpoint_path: Path, device: torch.device) -> tuple[MultimodalWatermelonModel, Any, dict[str, Any]]:
     if not checkpoint_path.exists():
         raise FileNotFoundError(checkpoint_path)
     checkpoint = torch.load(
@@ -122,10 +143,15 @@ def load_model(checkpoint_path: Path, device: torch.device) -> tuple[MultimodalW
     if "model_state_dict" not in checkpoint:
         raise KeyError("checkpoint is missing model_state_dict")
 
-    model = MultimodalWatermelonModel().to(device)
+    config = load_config(None)
+    saved_config = checkpoint.get("config")
+    if isinstance(saved_config, dict):
+        config = deep_merge(config, saved_config)
+
+    model = build_model(config).to(device)
     model.load_state_dict(checkpoint["model_state_dict"])
     model.eval()
-    return model, checkpoint
+    return model, checkpoint, config
 
 
 def build_prediction(
@@ -163,10 +189,15 @@ def main() -> None:
     with Image.open(image_path) as image:
         image_tensor = transform(image).unsqueeze(0).to(device)
 
+    model, checkpoint, config = load_model(checkpoint_path, device)
+    data_config = config["data"]
+    environment_fields = tuple(data_config["environment_fields"])
+
     environment, time_offsets, window_metadata = read_environment_window(
         environment_path=environment_path,
         capture_time_text=args.capture_time,
         window_hours=args.window_hours,
+        environment_fields=environment_fields,
     )
     environment = environment.unsqueeze(0).to(device)
     time_offsets = time_offsets.unsqueeze(0).to(device)
@@ -177,7 +208,6 @@ def main() -> None:
         device=device,
     )
 
-    model, checkpoint = load_model(checkpoint_path, device)
     with torch.no_grad():
         outputs = model(
             images=image_tensor,
@@ -200,6 +230,7 @@ def main() -> None:
         "environment": str(environment_path),
         "checkpoint": str(checkpoint_path),
         "checkpoint_epoch": checkpoint.get("epoch"),
+        "input_mode": config["model"].get("input_mode", "multimodal"),
         "device": str(device),
         **window_metadata,
         "predictions": predictions,

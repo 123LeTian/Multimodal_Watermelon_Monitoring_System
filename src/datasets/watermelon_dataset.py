@@ -16,6 +16,7 @@ from torch.utils.data import Dataset
 TIMESTAMP_FORMAT = "%Y-%m-%d %H:%M:%S"
 ENV_FIELDS = ("temperature", "soil_humidity", "light", "ph")
 LABEL_FIELDS = ("growth_stage", "health_level", "maturity_level", "abnormal_alert")
+MASK_FIELDS = tuple(f"{field}_valid" for field in LABEL_FIELDS)
 VALID_SPLITS = {"train", "val", "test"}
 
 
@@ -57,6 +58,8 @@ class WatermelonDataset(Dataset):
         self,
         dataset_dir: str | Path,
         split: str | None = None,
+        split_file: str | Path | None = None,
+        labels_file: str | Path | None = None,
         window_hours: int = 24,
         image_size: tuple[int, int] = (224, 224),
         normalize_image: bool = True,
@@ -64,6 +67,8 @@ class WatermelonDataset(Dataset):
     ) -> None:
         self.dataset_dir = Path(dataset_dir)
         self.split = split
+        self.split_file = self._resolve_split_file(split_file)
+        self.labels_file = self._resolve_labels_file(labels_file)
         self.window = timedelta(hours=window_hours)
         self.environment_fields = environment_fields or ENV_FIELDS
         self.image_transform = ImageTransform(
@@ -74,40 +79,73 @@ class WatermelonDataset(Dataset):
         if split is not None and split not in VALID_SPLITS:
             raise ValueError(f"split must be one of {sorted(VALID_SPLITS)} or None")
 
-        self.labels = read_csv_rows(self.dataset_dir / "labels.csv")
+        self.labels = read_csv_rows(self.labels_file)
         self.environment = read_csv_rows(self.dataset_dir / "environment.csv")
-        self.splits = read_csv_rows(self.dataset_dir / "split.csv")
+        self.splits = read_csv_rows(self.split_file)
+        self.has_task_masks = bool(self.labels and set(MASK_FIELDS).issubset(self.labels[0]))
 
         self._validate_required_files()
         self._filter_by_split()
         self._prepare_environment_cache()
 
+    def _resolve_split_file(self, split_file: str | Path | None) -> Path:
+        if split_file is None:
+            return self.dataset_dir / "split.csv"
+
+        path = Path(split_file)
+        if path.is_absolute():
+            return path
+        candidate = self.dataset_dir / path
+        if candidate.exists():
+            return candidate
+        return path
+
+    def _resolve_labels_file(self, labels_file: str | Path | None) -> Path:
+        if labels_file is None:
+            return self.dataset_dir / "labels.csv"
+
+        path = Path(labels_file)
+        if path.is_absolute():
+            return path
+        candidate = self.dataset_dir / path
+        if candidate.exists():
+            return candidate
+        return path
+
     def _validate_required_files(self) -> None:
         if not self.dataset_dir.exists():
             raise FileNotFoundError(self.dataset_dir)
+        if not self.labels_file.exists():
+            raise FileNotFoundError(self.labels_file)
         if not self.labels:
-            raise ValueError("labels.csv is empty")
+            raise ValueError(f"{self.labels_file} is empty")
         if not self.environment:
             raise ValueError("environment.csv is empty")
         if not self.splits:
-            raise ValueError("split.csv is empty")
+            raise ValueError(f"{self.split_file} is empty")
 
         required_label_fields = {"image_id", "image_path", "capture_time", *LABEL_FIELDS}
         required_env_fields = {"timestamp", *self.environment_fields}
         required_split_fields = {"image_id", "split"}
 
-        if set(self.labels[0]) != required_label_fields:
-            raise ValueError(f"labels.csv fields mismatch: {set(self.labels[0])}")
+        label_fields = set(self.labels[0])
+        if not required_label_fields.issubset(label_fields):
+            raise ValueError(f"{self.labels_file} missing fields: {required_label_fields - label_fields}")
+        present_mask_fields = label_fields & set(MASK_FIELDS)
+        if present_mask_fields and present_mask_fields != set(MASK_FIELDS):
+            raise ValueError(
+                f"{self.labels_file} has partial task masks: {sorted(present_mask_fields)}"
+            )
         if set(self.environment[0]) != required_env_fields:
             raise ValueError(f"environment.csv fields mismatch: {set(self.environment[0])}")
         if set(self.splits[0]) != required_split_fields:
-            raise ValueError(f"split.csv fields mismatch: {set(self.splits[0])}")
+            raise ValueError(f"{self.split_file} fields mismatch: {set(self.splits[0])}")
 
     def _filter_by_split(self) -> None:
         split_by_id = {row["image_id"]: row["split"] for row in self.splits}
         missing_ids = [row["image_id"] for row in self.labels if row["image_id"] not in split_by_id]
         if missing_ids:
-            raise ValueError(f"split.csv missing image_id values: {missing_ids[:5]}")
+            raise ValueError(f"{self.split_file} missing image_id values: {missing_ids[:5]}")
 
         if self.split is not None:
             self.labels = [
@@ -146,6 +184,10 @@ class WatermelonDataset(Dataset):
             "maturity_level": int(row["maturity_level"]),
             "abnormal_alert": int(row["abnormal_alert"]),
         }
+        task_masks = {
+            field: float(row.get(f"{field}_valid", "1"))
+            for field in LABEL_FIELDS
+        }
 
         return {
             "image_id": row["image_id"],
@@ -155,6 +197,7 @@ class WatermelonDataset(Dataset):
             "environment": environment,
             "time_offsets": time_offsets,
             "labels": labels,
+            "task_masks": task_masks,
         }
 
     def _get_environment_window(
@@ -203,6 +246,10 @@ def watermelon_collate_fn(batch: list[dict[str, Any]]) -> dict[str, Any]:
         field: torch.tensor([item["labels"][field] for item in batch], dtype=torch.long)
         for field in LABEL_FIELDS
     }
+    task_masks = {
+        field: torch.tensor([item["task_masks"][field] for item in batch], dtype=torch.float32)
+        for field in LABEL_FIELDS
+    }
 
     return {
         "image_ids": [item["image_id"] for item in batch],
@@ -214,4 +261,5 @@ def watermelon_collate_fn(batch: list[dict[str, Any]]) -> dict[str, Any]:
         "environment_mask": environment_mask,
         "environment_lengths": lengths,
         "labels": labels,
+        "task_masks": task_masks,
     }

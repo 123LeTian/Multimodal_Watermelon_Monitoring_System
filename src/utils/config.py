@@ -15,6 +15,7 @@ DEFAULT_CONFIG: dict[str, Any] = {
     },
     "data": {
         "dataset_dir": "dataset_sample",
+        "split_file": None,
         "image_size": [224, 224],
         "window_hours": 24,
         "environment_fields": ["temperature", "soil_humidity", "light", "ph"],
@@ -25,6 +26,7 @@ DEFAULT_CONFIG: dict[str, Any] = {
         },
     },
     "model": {
+        "input_mode": "multimodal",
         "image_backbone": "resnet50",
         "image_pretrained": False,
         "environment_encoder": "transformer",

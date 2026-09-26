@@ -1,0 +1,92 @@
+{
+  "validation": "passed",
+  "dataset_dir": "D:\\Project\\watermelon_monitoring\\dataset_fused",
+  "schema": "matches project data handoff requirements plus fusion provenance files",
+  "environment_rows": 4314,
+  "environment_start": "2023-06-01 00:00:00",
+  "environment_end": "2023-11-29 09:00:00",
+  "environment_interval_seconds_min": 3600,
+  "environment_interval_seconds_max": 147600,
+  "labels": 10000,
+  "images_opened": 10000,
+  "split_counts": {
+    "test": 1500,
+    "train": 7000,
+    "val": 1500
+  },
+  "growth_stage_counts": {
+    "0": 292,
+    "1": 598,
+    "2": 1533,
+    "3": 1577,
+    "4": 1800,
+    "5": 4200
+  },
+  "health_level_counts": {
+    "0": 5600,
+    "1": 1600,
+    "2": 2000,
+    "3": 800
+  },
+  "maturity_level_counts": {
+    "0": 5800,
+    "1": 800,
+    "2": 2600,
+    "3": 800
+  },
+  "abnormal_alert_counts": {
+    "0": 5600,
+    "1": 4400
+  },
+  "manifest_rows": 10000,
+  "source_dataset_counts": {
+    "fruq_db": 2400,
+    "kurdistan_watermelon_disease": 2619,
+    "watermelon_disease_recognition": 1381,
+    "watermelon_ripe_semiripe_unripe": 1882,
+    "watermelon_ripe_unripe": 1718
+  },
+  "fusion_group_counts": {
+    "disease_leaf": 2000,
+    "fresh_quality": 800,
+    "healthy_leaf": 1200,
+    "mild_leaf_abnormal": 800,
+    "mild_quality": 800,
+    "ripe_fruit": 1800,
+    "rotten_quality": 800,
+    "unripe_fruit": 1800
+  },
+  "fusion_groups_by_split": {
+    "test": {
+      "disease_leaf": 300,
+      "fresh_quality": 120,
+      "healthy_leaf": 180,
+      "mild_leaf_abnormal": 120,
+      "mild_quality": 120,
+      "ripe_fruit": 270,
+      "rotten_quality": 120,
+      "unripe_fruit": 270
+    },
+    "train": {
+      "disease_leaf": 1400,
+      "fresh_quality": 560,
+      "healthy_leaf": 840,
+      "mild_leaf_abnormal": 560,
+      "mild_quality": 560,
+      "ripe_fruit": 1260,
+      "rotten_quality": 560,
+      "unripe_fruit": 1260
+    },
+    "val": {
+      "disease_leaf": 300,
+      "fresh_quality": 120,
+      "healthy_leaf": 180,
+      "mild_leaf_abnormal": 120,
+      "mild_quality": 120,
+      "ripe_fruit": 270,
+      "rotten_quality": 120,
+      "unripe_fruit": 270
+    }
+  },
+  "quality_report_sample_count": 10000
+}

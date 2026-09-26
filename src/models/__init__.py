@@ -3,6 +3,7 @@ from src.models.multimodal_model import (
     MultimodalWatermelonModel,
     ResNetImageEncoder,
     TaskOutputDims,
+    VALID_INPUT_MODES,
 )
 
 __all__ = [
@@ -10,4 +11,5 @@ __all__ = [
     "MultimodalWatermelonModel",
     "ResNetImageEncoder",
     "TaskOutputDims",
+    "VALID_INPUT_MODES",
 ]

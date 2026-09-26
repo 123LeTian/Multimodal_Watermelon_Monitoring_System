@@ -1,0 +1,265 @@
+{
+  "note": "This report may be generated from simulated sample data. Do not use simulated-data metrics as final research conclusions.",
+  "dataset_dir": "dataset_fused",
+  "labels_file": "dataset_fused\\labels_masked.csv",
+  "split_file": "dataset_fused\\split_source_aware.csv",
+  "split": "test",
+  "samples": 1381,
+  "task_masks_enabled": true,
+  "checkpoint": "checkpoints\\exp007_masked_multitask_training\\best_model.pth",
+  "checkpoint_epoch": 22,
+  "input_mode": "multimodal",
+  "device": "cuda",
+  "losses": {
+    "growth_stage_loss": 0.0,
+    "health_level_loss": 1.3294791082900819,
+    "maturity_level_loss": 0.0,
+    "abnormal_alert_loss": 0.7184336312994587,
+    "total_loss": 2.047912743625047,
+    "growth_stage_valid_count": 0.0,
+    "health_level_valid_count": 1381.0,
+    "maturity_level_valid_count": 0.0,
+    "abnormal_alert_valid_count": 1381.0
+  },
+  "metrics": {
+    "growth_stage": {
+      "evaluated_samples": 0,
+      "accuracy": 0.0,
+      "macro_precision": 0.0,
+      "macro_recall": 0.0,
+      "macro_f1": 0.0,
+      "precision_by_class": [
+        0.0,
+        0.0,
+        0.0,
+        0.0,
+        0.0,
+        0.0
+      ],
+      "recall_by_class": [
+        0.0,
+        0.0,
+        0.0,
+        0.0,
+        0.0,
+        0.0
+      ],
+      "f1_by_class": [
+        0.0,
+        0.0,
+        0.0,
+        0.0,
+        0.0,
+        0.0
+      ],
+      "support": [
+        0,
+        0,
+        0,
+        0,
+        0,
+        0
+      ],
+      "confusion_matrix": [
+        [
+          0,
+          0,
+          0,
+          0,
+          0,
+          0
+        ],
+        [
+          0,
+          0,
+          0,
+          0,
+          0,
+          0
+        ],
+        [
+          0,
+          0,
+          0,
+          0,
+          0,
+          0
+        ],
+        [
+          0,
+          0,
+          0,
+          0,
+          0,
+          0
+        ],
+        [
+          0,
+          0,
+          0,
+          0,
+          0,
+          0
+        ],
+        [
+          0,
+          0,
+          0,
+          0,
+          0,
+          0
+        ]
+      ]
+    },
+    "health_level": {
+      "evaluated_samples": 1381,
+      "accuracy": 0.5372918175235337,
+      "macro_precision": 0.342333933373336,
+      "macro_recall": 0.2089639021238795,
+      "macro_f1": 0.2464992361969884,
+      "precision_by_class": [
+        0.5660377358490566,
+        0.0,
+        0.8032979976442874,
+        0.0
+      ],
+      "recall_by_class": [
+        0.16393442622950818,
+        0.0,
+        0.6719211822660098,
+        0.0
+      ],
+      "f1_by_class": [
+        0.2542372881355932,
+        0.0,
+        0.7317596566523604,
+        0.0
+      ],
+      "support": [
+        366,
+        0,
+        1015,
+        0
+      ],
+      "confusion_matrix": [
+        [
+          60,
+          138,
+          167,
+          1
+        ],
+        [
+          0,
+          0,
+          0,
+          0
+        ],
+        [
+          46,
+          287,
+          682,
+          0
+        ],
+        [
+          0,
+          0,
+          0,
+          0
+        ]
+      ]
+    },
+    "maturity_level": {
+      "evaluated_samples": 0,
+      "accuracy": 0.0,
+      "macro_precision": 0.0,
+      "macro_recall": 0.0,
+      "macro_f1": 0.0,
+      "precision_by_class": [
+        0.0,
+        0.0,
+        0.0,
+        0.0
+      ],
+      "recall_by_class": [
+        0.0,
+        0.0,
+        0.0,
+        0.0
+      ],
+      "f1_by_class": [
+        0.0,
+        0.0,
+        0.0,
+        0.0
+      ],
+      "support": [
+        0,
+        0,
+        0,
+        0
+      ],
+      "confusion_matrix": [
+        [
+          0,
+          0,
+          0,
+          0
+        ],
+        [
+          0,
+          0,
+          0,
+          0
+        ],
+        [
+          0,
+          0,
+          0,
+          0
+        ],
+        [
+          0,
+          0,
+          0,
+          0
+        ]
+      ]
+    },
+    "abnormal_alert": {
+      "evaluated_samples": 1381,
+      "accuracy": 0.7472845763939174,
+      "macro_precision": 0.6734873301859524,
+      "macro_recall": 0.5581644189614795,
+      "macro_f1": 0.5472075848547167,
+      "precision_by_class": [
+        0.5876288659793815,
+        0.7593457943925234
+      ],
+      "recall_by_class": [
+        0.1557377049180328,
+        0.9605911330049262
+      ],
+      "f1_by_class": [
+        0.24622030237580997,
+        0.8481948673336233
+      ],
+      "support": [
+        366,
+        1015
+      ],
+      "confusion_matrix": [
+        [
+          57,
+          309
+        ],
+        [
+          40,
+          975
+        ]
+      ],
+      "positive_precision": 0.7593457943925234,
+      "positive_recall": 0.9605911330049262,
+      "positive_f1": 0.8481948673336233
+    }
+  }
+}

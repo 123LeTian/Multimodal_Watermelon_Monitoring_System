@@ -11,7 +11,7 @@ ROOT = Path(__file__).resolve().parents[1]
 sys.path.insert(0, str(ROOT))
 
 from src.datasets import WatermelonDataset, watermelon_collate_fn
-from src.models import MultimodalWatermelonModel
+from src.models import MultimodalWatermelonModel, VALID_INPUT_MODES
 
 
 def parse_args() -> argparse.Namespace:
@@ -19,6 +19,12 @@ def parse_args() -> argparse.Namespace:
     parser.add_argument("--dataset-dir", default="dataset_sample")
     parser.add_argument("--split", default="train", choices=["train", "val", "test"])
     parser.add_argument("--batch-size", type=int, default=4)
+    parser.add_argument(
+        "--input-mode",
+        default="multimodal",
+        choices=VALID_INPUT_MODES,
+        help="Input modality mode to inspect.",
+    )
     parser.add_argument(
         "--device",
         default="auto",
@@ -53,7 +59,7 @@ def main() -> None:
     )
     batch = next(iter(loader))
 
-    model = MultimodalWatermelonModel().to(device)
+    model = MultimodalWatermelonModel(input_mode=args.input_mode).to(device)
     model.eval()
 
     with torch.no_grad():
@@ -68,6 +74,7 @@ def main() -> None:
     print(f"samples={len(dataset)}")
     print(f"image_ids={batch['image_ids']}")
     print(f"parameters={count_parameters(model)}")
+    print(f"input_mode={args.input_mode}")
     print(f"images_shape={tuple(batch['images'].shape)}")
     print(f"environment_shape={tuple(batch['environment'].shape)}")
 

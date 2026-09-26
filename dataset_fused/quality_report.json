@@ -1,0 +1,116 @@
+{
+  "seed": 42,
+  "sample_count": 10000,
+  "environment_rows": 4314,
+  "environment_date_range": [
+    "2023-06-01 00:00:00",
+    "2023-11-29 09:00:00"
+  ],
+  "available_by_group": {
+    "disease_leaf": 11145,
+    "fresh_quality": 2182,
+    "healthy_leaf": 3903,
+    "mild_leaf_abnormal": 2250,
+    "mild_quality": 1364,
+    "ripe_fruit": 18495,
+    "rotten_quality": 2101,
+    "unripe_fruit": 2071
+  },
+  "selected_by_group": {
+    "disease_leaf": 2000,
+    "fresh_quality": 800,
+    "healthy_leaf": 1200,
+    "mild_leaf_abnormal": 800,
+    "mild_quality": 800,
+    "ripe_fruit": 1800,
+    "rotten_quality": 800,
+    "unripe_fruit": 1800
+  },
+  "split_counts": {
+    "test": 1500,
+    "train": 7000,
+    "val": 1500
+  },
+  "source_dataset_counts": {
+    "fruq_db": 2400,
+    "kurdistan_watermelon_disease": 2619,
+    "watermelon_disease_recognition": 1381,
+    "watermelon_ripe_semiripe_unripe": 1882,
+    "watermelon_ripe_unripe": 1718
+  },
+  "source_class_counts": {
+    "Anthracnose": 569,
+    "Down_Mildew": 195,
+    "Downy_Mildew": 422,
+    "Fresh": 800,
+    "Healthy": 1200,
+    "Iron_Deficiency_Chlorosis": 800,
+    "Mild": 800,
+    "Mosaic_Virus": 443,
+    "Ripe": 596,
+    "Ripe_multiple": 12,
+    "Rotten": 800,
+    "Spider_mite_infestation": 371,
+    "ripe": 1175,
+    "ripe_multiple": 17,
+    "unripe": 1459,
+    "unripe_multiple": 341
+  },
+  "growth_stage_counts": {
+    "0": 292,
+    "1": 598,
+    "2": 1533,
+    "3": 1577,
+    "4": 1800,
+    "5": 4200
+  },
+  "health_level_counts": {
+    "0": 5600,
+    "1": 1600,
+    "2": 2000,
+    "3": 800
+  },
+  "maturity_level_counts": {
+    "0": 5800,
+    "1": 800,
+    "2": 2600,
+    "3": 800
+  },
+  "abnormal_alert_counts": {
+    "0": 5600,
+    "1": 4400
+  },
+  "sources": {
+    "watermelon_disease_recognition": {
+      "path": "data_external/raw/watermelon_disease_recognition",
+      "role": "Watermelon health and disease image labels."
+    },
+    "kurdistan_watermelon_disease": {
+      "path": "data_external/raw/kurdistan_watermelon_disease/augmented_extracted",
+      "role": "Watermelon health, disease, pest, and nutrient deficiency image labels."
+    },
+    "watermelon_ripe_semiripe_unripe": {
+      "path": "data_external/raw/watermelon_ripe_semiripe_unripe",
+      "role": "Watermelon ripeness image labels."
+    },
+    "watermelon_ripe_unripe": {
+      "path": "data_external/raw/watermelon_ripe_unripe",
+      "role": "Watermelon ripe/unripe image labels."
+    },
+    "fruq_db": {
+      "path": "data_external/raw/fruq_db",
+      "role": "Fruit quality labels, used in limited quantity for overripe/rotten examples."
+    },
+    "watermelon_environment": {
+      "path": "data_external/raw/watermelon_environment/watermelon_2023_south_Italy_ancillary_weather+LAI+GM+SWC.xlsx",
+      "role": "Real watermelon field weather and soil water data."
+    }
+  },
+  "notes": [
+    "Roboflow `empty` classes are skipped.",
+    "Ambiguous classes containing both ripe and unripe are skipped.",
+    "Kurdistan HEIC original captures are not used by default; the extracted augmented JPG/PNG images are used.",
+    "FruQ-DB is used in limited quantity for fruit quality and rotten/overripe supervision.",
+    "Every label row has a matching 24-hour environment window."
+  ]
+}

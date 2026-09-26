@@ -7,6 +7,9 @@ from torch import nn
 from torchvision.models import ResNet50_Weights, resnet50
 
 
+VALID_INPUT_MODES = ("multimodal", "image_only", "env_only")
+
+
 @dataclass(frozen=True)
 class TaskOutputDims:
     growth_stage: int = 6
@@ -105,20 +108,36 @@ class MultimodalWatermelonModel(nn.Module):
         sensor_dim: int = 4,
         time_dim: int = 1,
         image_pretrained: bool = False,
+        input_mode: str = "multimodal",
     ) -> None:
         super().__init__()
+        if input_mode not in VALID_INPUT_MODES:
+            raise ValueError(
+                f"input_mode must be one of {VALID_INPUT_MODES}, got {input_mode!r}"
+            )
+
+        self.input_mode = input_mode
         self.task_dims = task_dims or TaskOutputDims()
-        self.image_encoder = ResNetImageEncoder(
-            output_dim=image_feature_dim,
-            pretrained=image_pretrained,
-        )
-        self.environment_encoder = EnvironmentTransformerEncoder(
-            sensor_dim=sensor_dim,
-            time_dim=time_dim,
-            output_dim=environment_feature_dim,
-        )
+        self.image_encoder = None
+        self.environment_encoder = None
+
+        fusion_input_dim = 0
+        if self.uses_image:
+            self.image_encoder = ResNetImageEncoder(
+                output_dim=image_feature_dim,
+                pretrained=image_pretrained,
+            )
+            fusion_input_dim += image_feature_dim
+        if self.uses_environment:
+            self.environment_encoder = EnvironmentTransformerEncoder(
+                sensor_dim=sensor_dim,
+                time_dim=time_dim,
+                output_dim=environment_feature_dim,
+            )
+            fusion_input_dim += environment_feature_dim
+
         self.fusion = nn.Sequential(
-            nn.Linear(image_feature_dim + environment_feature_dim, fusion_dim),
+            nn.Linear(fusion_input_dim, fusion_dim),
             nn.ReLU(inplace=True),
             nn.Dropout(p=0.2),
         )
@@ -131,6 +150,14 @@ class MultimodalWatermelonModel(nn.Module):
             }
         )
 
+    @property
+    def uses_image(self) -> bool:
+        return self.input_mode in {"multimodal", "image_only"}
+
+    @property
+    def uses_environment(self) -> bool:
+        return self.input_mode in {"multimodal", "env_only"}
+
     def forward(
         self,
         images: torch.Tensor,
@@ -138,13 +165,23 @@ class MultimodalWatermelonModel(nn.Module):
         time_offsets: torch.Tensor,
         environment_mask: torch.Tensor,
     ) -> dict[str, torch.Tensor]:
-        image_features = self.image_encoder(images)
-        environment_features = self.environment_encoder(
-            environment=environment,
-            time_offsets=time_offsets,
-            environment_mask=environment_mask,
-        )
-        fused = self.fusion(torch.cat([image_features, environment_features], dim=-1))
+        features = []
+        if self.uses_image:
+            if self.image_encoder is None:
+                raise RuntimeError("image encoder is not initialized")
+            features.append(self.image_encoder(images))
+        if self.uses_environment:
+            if self.environment_encoder is None:
+                raise RuntimeError("environment encoder is not initialized")
+            features.append(
+                self.environment_encoder(
+                    environment=environment,
+                    time_offsets=time_offsets,
+                    environment_mask=environment_mask,
+                )
+            )
+
+        fused = self.fusion(torch.cat(features, dim=-1))
 
         return {
             f"{name}_logits": head(fused)

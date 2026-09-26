@@ -10,10 +10,27 @@ env/
 *.pth
 checkpoints/**
 !checkpoints/.gitkeep
+!checkpoints/final_weak_supervised_baseline/
+!checkpoints/final_weak_supervised_baseline/effective_config.yaml
 outputs/**
 !outputs/.gitkeep
+!outputs/final_weak_supervised_baseline/
+!outputs/final_weak_supervised_baseline/evaluation_report.json
+!outputs/final_weak_supervised_baseline/predictions.csv
+!outputs/final_weak_supervised_baseline/confusion_matrix.csv
 experiments/**
 !experiments/.gitkeep
+!experiments/final_experiment_summary.md
+!experiments/final_weak_supervised_baseline/
+!experiments/final_weak_supervised_baseline/experiment_summary.md
+!experiments/final_weak_supervised_baseline/MODEL_CARD.md
+!experiments/final_weak_supervised_baseline/train_command.txt
+
+# Fused dataset metadata can be tracked, but images are too large for normal git.
+dataset_fused/images/
+
+# Local handoff packages for Release or cloud drive upload.
+handoff_assets/
 
 # Generated single-sample files; keep only its documentation
 single_sample/**

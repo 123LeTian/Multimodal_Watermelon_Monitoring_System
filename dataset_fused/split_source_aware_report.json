@@ -1,0 +1,125 @@
+{
+  "strategy": "hold out one source_dataset as test; stratified validation from remaining sources",
+  "test_source": "watermelon_disease_recognition",
+  "val_ratio": 0.15,
+  "seed": 42,
+  "sample_count": 10000,
+  "split_counts": {
+    "test": 1381,
+    "train": 7326,
+    "val": 1293
+  },
+  "by_split": {
+    "train": {
+      "growth_stage": {
+        "0": 178,
+        "1": 428,
+        "2": 796,
+        "3": 824,
+        "4": 1530,
+        "5": 3570
+      },
+      "health_level": {
+        "0": 4449,
+        "1": 1360,
+        "2": 837,
+        "3": 680
+      },
+      "maturity_level": {
+        "0": 3756,
+        "1": 680,
+        "2": 2210,
+        "3": 680
+      },
+      "abnormal_alert": {
+        "0": 4449,
+        "1": 2877
+      },
+      "source_dataset": {
+        "fruq_db": 2040,
+        "kurdistan_watermelon_disease": 2226,
+        "watermelon_ripe_semiripe_unripe": 1600,
+        "watermelon_ripe_unripe": 1460
+      },
+      "fusion_group": {
+        "disease_leaf": 837,
+        "fresh_quality": 680,
+        "healthy_leaf": 709,
+        "mild_leaf_abnormal": 680,
+        "mild_quality": 680,
+        "ripe_fruit": 1530,
+        "rotten_quality": 680,
+        "unripe_fruit": 1530
+      }
+    },
+    "val": {
+      "growth_stage": {
+        "0": 32,
+        "1": 76,
+        "2": 140,
+        "3": 145,
+        "4": 270,
+        "5": 630
+      },
+      "health_level": {
+        "0": 785,
+        "1": 240,
+        "2": 148,
+        "3": 120
+      },
+      "maturity_level": {
+        "0": 663,
+        "1": 120,
+        "2": 390,
+        "3": 120
+      },
+      "abnormal_alert": {
+        "0": 785,
+        "1": 508
+      },
+      "source_dataset": {
+        "fruq_db": 360,
+        "kurdistan_watermelon_disease": 393,
+        "watermelon_ripe_semiripe_unripe": 282,
+        "watermelon_ripe_unripe": 258
+      },
+      "fusion_group": {
+        "disease_leaf": 148,
+        "fresh_quality": 120,
+        "healthy_leaf": 125,
+        "mild_leaf_abnormal": 120,
+        "mild_quality": 120,
+        "ripe_fruit": 270,
+        "rotten_quality": 120,
+        "unripe_fruit": 270
+      }
+    },
+    "test": {
+      "growth_stage": {
+        "0": 82,
+        "1": 94,
+        "2": 597,
+        "3": 608
+      },
+      "health_level": {
+        "0": 366,
+        "2": 1015
+      },
+      "maturity_level": {
+        "0": 1381
+      },
+      "abnormal_alert": {
+        "0": 366,
+        "1": 1015
+      },
+      "source_dataset": {
+        "watermelon_disease_recognition": 1381
+      },
+      "fusion_group": {
+        "disease_leaf": 1015,
+        "healthy_leaf": 366
+      }
+    }
+  },
+  "caveat": "The test split is source-held-out, but it only contains labels available in the held-out source. Interpret unsupported-class macro metrics carefully."
+}

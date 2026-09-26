@@ -11,7 +11,7 @@ ROOT = Path(__file__).resolve().parents[1]
 sys.path.insert(0, str(ROOT))
 
 from src.datasets import WatermelonDataset, watermelon_collate_fn
-from src.models import MultimodalWatermelonModel
+from src.models import MultimodalWatermelonModel, VALID_INPUT_MODES
 from src.training import MultiTaskLoss
 
 
@@ -22,6 +22,12 @@ def parse_args() -> argparse.Namespace:
     parser.add_argument("--dataset-dir", default="dataset_sample")
     parser.add_argument("--split", default="train", choices=["train", "val", "test"])
     parser.add_argument("--batch-size", type=int, default=4)
+    parser.add_argument(
+        "--input-mode",
+        default="multimodal",
+        choices=VALID_INPUT_MODES,
+        help="Input modality mode to inspect.",
+    )
     parser.add_argument(
         "--device",
         default="auto",
@@ -51,7 +57,7 @@ def main() -> None:
     )
     batch = next(iter(loader))
 
-    model = MultimodalWatermelonModel().to(device)
+    model = MultimodalWatermelonModel(input_mode=args.input_mode).to(device)
     criterion = MultiTaskLoss()
     model.train()
 
@@ -77,6 +83,7 @@ def main() -> None:
     )
 
     print(f"device={device}")
+    print(f"input_mode={args.input_mode}")
     print(f"batch_size={batch['images'].shape[0]}")
     print(f"total_loss={total_loss.item():.6f}")
     for task in ("growth_stage", "health_level", "maturity_level", "abnormal_alert"):

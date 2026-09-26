@@ -58,14 +58,18 @@ class MultiTaskLoss(nn.Module):
         self,
         outputs: Mapping[str, torch.Tensor],
         labels: Mapping[str, torch.Tensor],
+        task_masks: Mapping[str, torch.Tensor] | None = None,
         return_details: bool = False,
     ) -> torch.Tensor | tuple[torch.Tensor, dict[str, torch.Tensor]]:
         """Calculate total loss and, optionally, each task's loss.
 
         `outputs` must contain keys such as `growth_stage_logits`.
         `labels` must contain one integer class-index tensor per task.
+        If `task_masks` is provided, each task loss is computed only for
+        samples with mask value > 0. A fully masked task contributes zero.
         """
         task_losses: dict[str, torch.Tensor] = {}
+        task_valid_counts: dict[str, torch.Tensor] = {}
 
         for task in TASK_NAMES:
             logits_key = f"{task}_logits"
@@ -88,7 +92,22 @@ class MultiTaskLoss(nn.Module):
                     f"logits={logits.shape[0]}, targets={targets.shape[0]}"
                 )
 
-            task_losses[task] = self.criteria[task](logits, targets)
+            if task_masks is None or task not in task_masks:
+                mask = torch.ones_like(targets, dtype=torch.bool, device=logits.device)
+            else:
+                mask = task_masks[task].to(device=logits.device).view(-1) > 0
+                if mask.shape[0] != targets.shape[0]:
+                    raise ValueError(
+                        f"mask size mismatch for {task}: "
+                        f"mask={mask.shape[0]}, targets={targets.shape[0]}"
+                    )
+
+            valid_count = mask.sum()
+            task_valid_counts[task] = valid_count
+            if int(valid_count.item()) == 0:
+                task_losses[task] = logits.sum() * 0.0
+            else:
+                task_losses[task] = self.criteria[task](logits[mask], targets[mask])
 
         total_loss = sum(
             self.task_weights[task] * task_losses[task]
@@ -99,6 +118,9 @@ class MultiTaskLoss(nn.Module):
             details: dict[str, torch.Tensor] = {
                 f"{task}_loss": task_losses[task] for task in TASK_NAMES
             }
+            details.update(
+                {f"{task}_valid_count": task_valid_counts[task] for task in TASK_NAMES}
+            )
             details["total_loss"] = total_loss
             return total_loss, details
 
@@ -108,9 +130,10 @@ class MultiTaskLoss(nn.Module):
 def calculate_multitask_loss(
     outputs: Mapping[str, torch.Tensor],
     labels: Mapping[str, torch.Tensor],
+    task_masks: Mapping[str, torch.Tensor] | None = None,
     task_weights: Mapping[str, float] | None = None,
 ) -> tuple[torch.Tensor, dict[str, torch.Tensor]]:
     """Convenience function returning total and per-task losses."""
     criterion = MultiTaskLoss(task_weights=task_weights)
-    total_loss, details = criterion(outputs, labels, return_details=True)
+    total_loss, details = criterion(outputs, labels, task_masks=task_masks, return_details=True)
     return total_loss, details

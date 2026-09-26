@@ -17,7 +17,7 @@ ROOT = Path(__file__).resolve().parents[1]
 sys.path.insert(0, str(ROOT))
 
 from src.datasets import WatermelonDataset, watermelon_collate_fn
-from src.models import MultimodalWatermelonModel, TaskOutputDims
+from src.models import MultimodalWatermelonModel, TaskOutputDims, VALID_INPUT_MODES
 from src.training import MultiTaskLoss
 from src.utils import load_config, save_config
 
@@ -38,6 +38,16 @@ def parse_args() -> argparse.Namespace:
         help="YAML configuration path. CLI arguments override YAML values.",
     )
     parser.add_argument("--dataset-dir", default=None)
+    parser.add_argument(
+        "--split-file",
+        default=None,
+        help="Optional split CSV path. Defaults to split.csv inside the dataset directory.",
+    )
+    parser.add_argument(
+        "--labels-file",
+        default=None,
+        help="Optional labels CSV path. Defaults to labels.csv inside the dataset directory.",
+    )
     parser.add_argument("--epochs", type=int, default=None)
     parser.add_argument("--batch-size", type=int, default=None)
     parser.add_argument("--lr", type=float, default=None)
@@ -53,6 +63,12 @@ def parse_args() -> argparse.Namespace:
         default=None,
     )
     parser.add_argument("--label-smoothing", type=float, default=None)
+    parser.add_argument(
+        "--input-mode",
+        default=None,
+        choices=VALID_INPUT_MODES,
+        help="Input modality mode for ablation experiments.",
+    )
     parser.add_argument("--checkpoint-dir", default=None)
     parser.add_argument(
         "--device",
@@ -80,6 +96,8 @@ def apply_cli_overrides(
 ) -> dict[str, Any]:
     overrides = {
         "dataset_dir": ("data", "dataset_dir"),
+        "split_file": ("data", "split_file"),
+        "labels_file": ("data", "labels_file"),
         "epochs": ("training", "epochs"),
         "batch_size": ("training", "batch_size"),
         "lr": ("training", "learning_rate"),
@@ -88,6 +106,7 @@ def apply_cli_overrides(
         "num_workers": ("training", "num_workers"),
         "window_hours": ("data", "window_hours"),
         "label_smoothing": ("loss", "label_smoothing"),
+        "input_mode": ("model", "input_mode"),
         "device": ("training", "device"),
     }
     for argument_name, config_path in overrides.items():
@@ -140,15 +159,22 @@ def move_batch_to_device(batch: dict[str, Any], device: torch.device) -> dict[st
             name: values.to(device)
             for name, values in batch["labels"].items()
         },
+        "task_masks": {
+            name: values.to(device)
+            for name, values in batch.get("task_masks", {}).items()
+        },
     }
 
 
 def create_loader(
     dataset_dir: str | Path,
     split: str,
+    split_file: str | Path | None,
+    labels_file: str | Path | None,
     batch_size: int,
     shuffle: bool,
     num_workers: int,
+    pin_memory: bool,
     window_hours: int,
     image_size: tuple[int, int],
     environment_fields: tuple[str, ...],
@@ -156,6 +182,8 @@ def create_loader(
     dataset = WatermelonDataset(
         dataset_dir=dataset_dir,
         split=split,
+        split_file=split_file,
+        labels_file=labels_file,
         window_hours=window_hours,
         image_size=image_size,
         environment_fields=environment_fields,
@@ -165,6 +193,8 @@ def create_loader(
         batch_size=batch_size,
         shuffle=shuffle,
         num_workers=num_workers,
+        pin_memory=pin_memory,
+        persistent_workers=num_workers > 0,
         collate_fn=watermelon_collate_fn,
     )
 
@@ -199,6 +229,7 @@ def run_epoch(
             total_loss, details = criterion(
                 outputs,
                 batch_on_device["labels"],
+                task_masks=batch_on_device.get("task_masks"),
                 return_details=True,
             )
 
@@ -208,12 +239,18 @@ def run_epoch(
 
         sample_count += current_batch_size
         for key, value in details.items():
-            totals[key] += float(value.detach().cpu()) * current_batch_size
+            if key.endswith("_valid_count"):
+                totals[key] += float(value.detach().cpu())
+            else:
+                totals[key] += float(value.detach().cpu()) * current_batch_size
 
-    return {
-        key: value / max(sample_count, 1)
-        for key, value in totals.items()
-    }
+    metrics: dict[str, float] = {}
+    for key, value in totals.items():
+        if key.endswith("_valid_count"):
+            metrics[key] = value
+        else:
+            metrics[key] = value / max(sample_count, 1)
+    return metrics
 
 
 def save_checkpoint(
@@ -269,6 +306,7 @@ def build_model(config: dict[str, Any]) -> MultimodalWatermelonModel:
         time_dim=int(model_config["time_feature_dim"]),
         task_dims=task_dims,
         image_pretrained=bool(model_config["image_pretrained"]),
+        input_mode=str(model_config.get("input_mode", "multimodal")),
     )
 
 
@@ -303,6 +341,7 @@ def main() -> None:
 
     set_seed(int(config["project"]["seed"]))
     device = resolve_device(str(training_config["device"]))
+    pin_memory = device.type == "cuda"
     checkpoint_dir = Path(output_config["checkpoint_dir"])
     checkpoint_dir.mkdir(parents=True, exist_ok=True)
     save_config(config, checkpoint_dir / "effective_config.yaml")
@@ -311,9 +350,12 @@ def main() -> None:
     train_loader = create_loader(
         dataset_dir=data_config["dataset_dir"],
         split=split_config["train"],
+        split_file=data_config.get("split_file"),
+        labels_file=data_config.get("labels_file"),
         batch_size=batch_size,
         shuffle=True,
         num_workers=num_workers,
+        pin_memory=pin_memory,
         window_hours=window_hours,
         image_size=image_size,
         environment_fields=environment_fields,
@@ -321,9 +363,12 @@ def main() -> None:
     val_loader = create_loader(
         dataset_dir=data_config["dataset_dir"],
         split=split_config["validation"],
+        split_file=data_config.get("split_file"),
+        labels_file=data_config.get("labels_file"),
         batch_size=batch_size,
         shuffle=False,
         num_workers=num_workers,
+        pin_memory=pin_memory,
         window_hours=window_hours,
         image_size=image_size,
         environment_fields=environment_fields,
@@ -343,10 +388,16 @@ def main() -> None:
     print(f"config={args.config or 'built-in defaults'}")
     print(f"device={device}")
     print(f"dataset_dir={data_config['dataset_dir']}")
+    print(f"labels_file={data_config.get('labels_file') or 'labels.csv'}")
+    print(f"split_file={data_config.get('split_file') or 'split.csv'}")
+    print(f"task_masks_enabled={getattr(train_loader.dataset, 'has_task_masks', False)}")
     print(f"train_samples={len(train_loader.dataset)}")
     print(f"val_samples={len(val_loader.dataset)}")
     print(f"epochs={epochs}")
     print(f"batch_size={batch_size}")
+    print(f"pin_memory={pin_memory}")
+    print(f"persistent_workers={num_workers > 0}")
+    print(f"input_mode={config['model'].get('input_mode', 'multimodal')}")
     print(f"image_size={image_size}")
     print(f"window_hours={window_hours}")
 
