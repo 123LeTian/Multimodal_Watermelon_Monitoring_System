@@ -42,7 +42,18 @@ def parse_args() -> argparse.Namespace:
     parser.add_argument("--image", required=True)
     parser.add_argument("--environment", required=True)
     parser.add_argument("--capture-time", required=True)
+    parser.add_argument(
+        "--sensor-device-id",
+        default=None,
+        help="Sensor device_id to match when environment.csv contains multiple devices.",
+    )
     parser.add_argument("--window-hours", type=int, default=24)
+    parser.add_argument(
+        "--abnormal-alert-threshold",
+        type=float,
+        default=None,
+        help="Optional positive-class threshold for abnormal alerts.",
+    )
     parser.add_argument("--output", default="outputs/single_prediction.json")
     parser.add_argument(
         "--device",
@@ -65,7 +76,11 @@ def read_environment_window(
     capture_time_text: str,
     window_hours: int,
     environment_fields: tuple[str, ...] = ENV_FIELDS,
-) -> tuple[torch.Tensor, torch.Tensor, dict[str, Any]]:
+    environment_normalization: dict[str, tuple[float, float]] | None = None,
+    optional_environment_fields: tuple[str, ...] = (),
+    sensor_device_id: str | None = None,
+    require_device_id: bool = False,
+) -> tuple[torch.Tensor, torch.Tensor, torch.Tensor, dict[str, Any]]:
     if window_hours <= 0:
         raise ValueError("--window-hours must be positive")
 
@@ -74,20 +89,64 @@ def read_environment_window(
     if not rows:
         raise ValueError("environment.csv is empty")
 
-    required_fields = {"timestamp", *environment_fields}
+    optional_fields = set(optional_environment_fields)
+    required_fields = {"timestamp", *(set(environment_fields) - optional_fields)}
     missing_fields = required_fields - set(rows[0])
+    if (
+        "soil_humidity" in environment_fields
+        and "soil_humidity" not in rows[0]
+        and "air_humidity" in rows[0]
+    ):
+        raise ValueError(
+            "environment.csv contains air_humidity but the project requires "
+            "soil_humidity; these measurements are not interchangeable"
+        )
     if missing_fields:
         raise ValueError(f"environment.csv missing fields: {sorted(missing_fields)}")
+    if require_device_id and "device_id" not in rows[0]:
+        raise ValueError("environment.csv must contain device_id for this checkpoint")
 
-    parsed_rows = sorted(
-        (
-            parse_timestamp(row["timestamp"]),
-            [float(row[field]) for field in environment_fields],
-        )
-        for row in rows
+    available_devices = sorted(
+        {row.get("device_id", "").strip() or "default" for row in rows}
     )
+    if sensor_device_id is None:
+        if len(available_devices) > 1:
+            raise ValueError(
+                "environment.csv contains multiple devices; pass --sensor-device-id"
+            )
+        sensor_device_id = available_devices[0]
+    rows = [
+        row
+        for row in rows
+        if (row.get("device_id", "").strip() or "default") == sensor_device_id
+    ]
+    if not rows:
+        raise ValueError(f"no environment rows found for device_id={sensor_device_id!r}")
+
+    normalization = environment_normalization or {}
+    parsed_rows = []
+    for row in rows:
+        values: list[float] = []
+        masks: list[float] = []
+        for field in environment_fields:
+            raw_value = row.get(field, "").strip()
+            if not raw_value:
+                if field not in optional_fields:
+                    raise ValueError(f"missing required {field} at {row['timestamp']}")
+                values.append(0.0)
+                masks.append(0.0)
+                continue
+            value = float(raw_value)
+            if field in normalization:
+                center, scale = normalization[field]
+                value = (value - center) / scale
+            values.append(value)
+            masks.append(1.0)
+        parsed_rows.append((parse_timestamp(row["timestamp"]), values, masks))
+    parsed_rows.sort(key=lambda item: item[0])
     environment_times = [item[0] for item in parsed_rows]
     environment_values = [item[1] for item in parsed_rows]
+    environment_sensor_masks = [item[2] for item in parsed_rows]
 
     capture_time = parse_timestamp(capture_time_text)
     window_start = capture_time - timedelta(hours=window_hours)
@@ -101,6 +160,9 @@ def read_environment_window(
         )
 
     values = torch.tensor(environment_values[start:end], dtype=torch.float32)
+    sensor_mask = torch.tensor(
+        environment_sensor_masks[start:end], dtype=torch.float32
+    )
     offsets = [
         (time - capture_time).total_seconds() / (window_hours * 3600)
         for time in environment_times[start:end]
@@ -110,11 +172,15 @@ def read_environment_window(
         "window_start": window_start.strftime(TIMESTAMP_FORMAT),
         "window_end": capture_time.strftime(TIMESTAMP_FORMAT),
         "environment_rows": int(values.shape[0]),
+        "sensor_device_id": sensor_device_id,
     }
-    return values, time_offsets, metadata
+    return values, sensor_mask, time_offsets, metadata
 
 
-def build_model(config: dict[str, Any]) -> MultimodalWatermelonModel:
+def build_model(
+    config: dict[str, Any],
+    image_pretrained: bool | None = None,
+) -> MultimodalWatermelonModel:
     model_config = config["model"]
     task_config = model_config["output_tasks"]
     task_dims = TaskOutputDims(
@@ -127,8 +193,13 @@ def build_model(config: dict[str, Any]) -> MultimodalWatermelonModel:
         sensor_dim=int(model_config["sensor_dim"]),
         time_dim=int(model_config["time_feature_dim"]),
         task_dims=task_dims,
-        image_pretrained=bool(model_config["image_pretrained"]),
+        image_pretrained=(
+            bool(model_config["image_pretrained"])
+            if image_pretrained is None
+            else image_pretrained
+        ),
         input_mode=str(model_config.get("input_mode", "multimodal")),
+        use_sensor_mask=bool(model_config.get("use_sensor_mask", False)),
     )
 
 
@@ -148,7 +219,7 @@ def load_model(checkpoint_path: Path, device: torch.device) -> tuple[MultimodalW
     if isinstance(saved_config, dict):
         config = deep_merge(config, saved_config)
 
-    model = build_model(config).to(device)
+    model = build_model(config, image_pretrained=False).to(device)
     model.load_state_dict(checkpoint["model_state_dict"])
     model.eval()
     return model, checkpoint, config
@@ -157,11 +228,19 @@ def load_model(checkpoint_path: Path, device: torch.device) -> tuple[MultimodalW
 def build_prediction(
     logits: torch.Tensor,
     task: str,
+    positive_threshold: float | None = None,
 ) -> dict[str, Any]:
     probabilities = torch.softmax(logits, dim=-1)
-    confidence, class_id = probabilities.max(dim=-1)
-    class_index = int(class_id.item())
-    return {
+    if positive_threshold is not None:
+        if task != "abnormal_alert":
+            raise ValueError("positive threshold is only supported for abnormal_alert")
+        class_index = int(probabilities[0, 1].item() >= positive_threshold)
+        confidence = probabilities[0, class_index]
+    else:
+        confidence, class_id = probabilities.max(dim=-1)
+        class_index = int(class_id.item())
+
+    prediction = {
         "class_id": class_index,
         "class_name": CLASS_NAMES[task][class_index],
         "confidence": float(confidence.item()),
@@ -169,10 +248,18 @@ def build_prediction(
             float(value) for value in probabilities.squeeze(0).tolist()
         ],
     }
+    if positive_threshold is not None:
+        prediction["decision_threshold"] = positive_threshold
+    return prediction
 
 
 def main() -> None:
     args = parse_args()
+    if (
+        args.abnormal_alert_threshold is not None
+        and not 0.0 <= args.abnormal_alert_threshold <= 1.0
+    ):
+        raise ValueError("abnormal alert threshold must be in [0, 1]")
     device = resolve_device(args.device)
 
     image_path = Path(args.image)
@@ -185,21 +272,39 @@ def main() -> None:
     if not environment_path.exists():
         raise FileNotFoundError(environment_path)
 
-    transform = ImageTransform()
-    with Image.open(image_path) as image:
-        image_tensor = transform(image).unsqueeze(0).to(device)
-
     model, checkpoint, config = load_model(checkpoint_path, device)
     data_config = config["data"]
     environment_fields = tuple(data_config["environment_fields"])
+    normalization_config = data_config.get("environment_normalization", {})
+    if normalization_config == "auto":
+        raise ValueError(
+            "checkpoint contains unresolved automatic environment normalization"
+        )
+    environment_normalization = {
+        field: (float(values[0]), float(values[1]))
+        for field, values in normalization_config.items()
+    }
+    transform = ImageTransform(
+        image_size=tuple(int(value) for value in data_config["image_size"]),
+        preserve_aspect_ratio=bool(data_config.get("preserve_aspect_ratio", False)),
+    )
+    with Image.open(image_path) as image:
+        image_tensor = transform(image).unsqueeze(0).to(device)
 
-    environment, time_offsets, window_metadata = read_environment_window(
+    environment, environment_sensor_mask, time_offsets, window_metadata = read_environment_window(
         environment_path=environment_path,
         capture_time_text=args.capture_time,
         window_hours=args.window_hours,
         environment_fields=environment_fields,
+        environment_normalization=environment_normalization,
+        optional_environment_fields=tuple(
+            data_config.get("optional_environment_fields", ())
+        ),
+        sensor_device_id=args.sensor_device_id,
+        require_device_id=bool(data_config.get("require_device_id", False)),
     )
     environment = environment.unsqueeze(0).to(device)
+    environment_sensor_mask = environment_sensor_mask.unsqueeze(0).to(device)
     time_offsets = time_offsets.unsqueeze(0).to(device)
     environment_mask = torch.ones(
         1,
@@ -212,12 +317,21 @@ def main() -> None:
         outputs = model(
             images=image_tensor,
             environment=environment,
+            environment_sensor_mask=environment_sensor_mask,
             time_offsets=time_offsets,
             environment_mask=environment_mask,
         )
 
     predictions = {
-        task: build_prediction(outputs[f"{task}_logits"], task)
+        task: build_prediction(
+            outputs[f"{task}_logits"],
+            task,
+            positive_threshold=(
+                args.abnormal_alert_threshold
+                if task == "abnormal_alert"
+                else None
+            ),
+        )
         for task in CLASS_NAMES
     }
     result = {
@@ -232,6 +346,7 @@ def main() -> None:
         "checkpoint_epoch": checkpoint.get("epoch"),
         "input_mode": config["model"].get("input_mode", "multimodal"),
         "device": str(device),
+        "abnormal_alert_threshold": args.abnormal_alert_threshold,
         **window_metadata,
         "predictions": predictions,
     }

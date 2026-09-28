@@ -46,6 +46,12 @@ def parse_args() -> argparse.Namespace:
     parser.add_argument("--batch-size", type=int, default=4)
     parser.add_argument("--num-workers", type=int, default=0)
     parser.add_argument(
+        "--abnormal-alert-threshold",
+        type=float,
+        default=None,
+        help="Optional positive-class probability threshold for abnormal alerts.",
+    )
+    parser.add_argument(
         "--device",
         default="auto",
         choices=["auto", "cpu", "cuda"],
@@ -77,7 +83,10 @@ def move_task_masks_to_device(
     return {name: values.to(device) for name, values in task_masks.items()}
 
 
-def build_model(config: dict[str, Any]) -> MultimodalWatermelonModel:
+def build_model(
+    config: dict[str, Any],
+    image_pretrained: bool | None = None,
+) -> MultimodalWatermelonModel:
     model_config = config["model"]
     task_config = model_config["output_tasks"]
     task_dims = TaskOutputDims(
@@ -90,8 +99,13 @@ def build_model(config: dict[str, Any]) -> MultimodalWatermelonModel:
         sensor_dim=int(model_config["sensor_dim"]),
         time_dim=int(model_config["time_feature_dim"]),
         task_dims=task_dims,
-        image_pretrained=bool(model_config["image_pretrained"]),
+        image_pretrained=(
+            bool(model_config["image_pretrained"])
+            if image_pretrained is None
+            else image_pretrained
+        ),
         input_mode=str(model_config.get("input_mode", "multimodal")),
+        use_sensor_mask=bool(model_config.get("use_sensor_mask", False)),
     )
 
 
@@ -112,7 +126,7 @@ def load_model(checkpoint_path: Path, device: torch.device) -> tuple[MultimodalW
         raise KeyError("checkpoint is missing model_state_dict")
 
     config = checkpoint_config(checkpoint)
-    model = build_model(config).to(device)
+    model = build_model(config, image_pretrained=False).to(device)
     model.load_state_dict(checkpoint["model_state_dict"])
     model.eval()
     return model, checkpoint, config
@@ -123,7 +137,10 @@ def evaluate(
     loader: DataLoader,
     criterion: MultiTaskLoss,
     device: torch.device,
+    abnormal_alert_threshold: float | None = None,
 ) -> tuple[dict[str, float], dict[str, dict[str, Any]], list[dict[str, Any]]]:
+    if abnormal_alert_threshold is not None and not 0.0 <= abnormal_alert_threshold <= 1.0:
+        raise ValueError("abnormal alert threshold must be in [0, 1]")
     loss_totals = {f"{task}_loss": 0.0 for task in TASK_NAMES}
     loss_totals["total_loss"] = 0.0
     sample_count = 0
@@ -136,6 +153,7 @@ def evaluate(
         for batch in loader:
             images = batch["images"].to(device)
             environment = batch["environment"].to(device)
+            environment_sensor_mask = batch["environment_sensor_mask"].to(device)
             time_offsets = batch["time_offsets"].to(device)
             environment_mask = batch["environment_mask"].to(device)
             labels = move_labels_to_device(batch["labels"], device)
@@ -144,6 +162,7 @@ def evaluate(
             outputs = model(
                 images=images,
                 environment=environment,
+                environment_sensor_mask=environment_sensor_mask,
                 time_offsets=time_offsets,
                 environment_mask=environment_mask,
             )
@@ -163,8 +182,16 @@ def evaluate(
                     loss_totals[key] += float(value.detach().cpu()) * batch_size
 
             batch_predictions = {}
+            abnormal_alert_probabilities = torch.softmax(
+                outputs["abnormal_alert_logits"], dim=1
+            )[:, 1]
             for task in TASK_NAMES:
-                predictions = outputs[f"{task}_logits"].argmax(dim=1)
+                if task == "abnormal_alert" and abnormal_alert_threshold is not None:
+                    predictions = (
+                        abnormal_alert_probabilities >= abnormal_alert_threshold
+                    ).long()
+                else:
+                    predictions = outputs[f"{task}_logits"].argmax(dim=1)
                 batch_predictions[task] = predictions
                 if task_masks is None or task not in task_masks:
                     valid_mask = torch.ones_like(labels[task], dtype=torch.bool, device=device)
@@ -185,6 +212,9 @@ def evaluate(
                         row[f"{task}_valid"] = 1
                     else:
                         row[f"{task}_valid"] = int(task_masks[task][row_index].detach().cpu() > 0)
+                row["abnormal_alert_probability"] = float(
+                    abnormal_alert_probabilities[row_index].detach().cpu()
+                )
                 prediction_rows.append(row)
 
     losses = {}
@@ -254,6 +284,15 @@ def main() -> None:
     loss_config = config["loss"]
     image_size = tuple(int(value) for value in data_config["image_size"])
     environment_fields = tuple(data_config["environment_fields"])
+    normalization_config = data_config.get("environment_normalization", {})
+    if normalization_config == "auto":
+        raise ValueError(
+            "checkpoint contains unresolved automatic environment normalization"
+        )
+    environment_normalization = {
+        field: (float(values[0]), float(values[1]))
+        for field, values in normalization_config.items()
+    }
 
     split_file = args.split_file or data_config.get("split_file")
     labels_file = args.labels_file or data_config.get("labels_file")
@@ -266,6 +305,14 @@ def main() -> None:
         window_hours=int(data_config["window_hours"]),
         image_size=image_size,
         environment_fields=environment_fields,
+        environment_normalization=environment_normalization,
+        optional_environment_fields=tuple(
+            data_config.get("optional_environment_fields", ())
+        ),
+        preserve_aspect_ratio=bool(data_config.get("preserve_aspect_ratio", False)),
+        strict_time_alignment=bool(data_config.get("strict_time_alignment", True)),
+        require_device_id=bool(data_config.get("require_device_id", False)),
+        require_task_masks=bool(data_config.get("require_task_masks", False)),
     )
     loader = DataLoader(
         dataset,
@@ -278,14 +325,16 @@ def main() -> None:
     )
     criterion = MultiTaskLoss(
         task_weights=loss_config["task_weights"],
+        class_weights=loss_config.get("class_weights"),
         label_smoothing=float(loss_config["label_smoothing"]),
-    )
+    ).to(device)
 
     losses, metrics, predictions = evaluate(
         model=model,
         loader=loader,
         criterion=criterion,
         device=device,
+        abnormal_alert_threshold=args.abnormal_alert_threshold,
     )
 
     report = {
@@ -303,6 +352,7 @@ def main() -> None:
         "checkpoint_epoch": checkpoint.get("epoch"),
         "input_mode": config["model"].get("input_mode", "multimodal"),
         "device": str(device),
+        "abnormal_alert_threshold": args.abnormal_alert_threshold,
         "losses": losses,
         "metrics": metrics,
     }

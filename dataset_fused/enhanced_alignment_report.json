@@ -1,0 +1,26 @@
+{
+  "labels_file": "dataset_fused\\labels_masked.csv",
+  "environment_file": "dataset_fused\\environment.csv",
+  "label_samples": 10000,
+  "environment_records": 4314,
+  "covered_samples": 10000,
+  "coverage": 1.0,
+  "required_coverage": 1.0,
+  "image_time_range": [
+    "2023-06-02 00:00:00",
+    "2023-11-29 09:00:00"
+  ],
+  "environment_time_range": [
+    "2023-06-01 00:00:00",
+    "2023-11-29 09:00:00"
+  ],
+  "device_ids_in_labels": [
+    "default"
+  ],
+  "device_ids_in_environment": [
+    "default"
+  ],
+  "task_masks_present": true,
+  "uncovered_examples": [],
+  "status": "ok"
+}

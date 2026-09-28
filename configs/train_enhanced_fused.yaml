@@ -1,30 +1,25 @@
-# Watermelon multimodal model training configuration.
-#
-# scripts/train.py reads this file when called with --config. Command-line
-# arguments override values from this file.
-
 project:
-  name: watermelon_multimodal_monitoring
-  description: ResNet50 + Transformer multi-task classification model
+  name: watermelon_enhanced_multimodal_fused
+  description: Original multimodal model with robust V4 data and training mechanisms
   seed: 42
 
 data:
-  dataset_dir: dataset_sample
-  split_file: null
+  dataset_dir: dataset_fused
+  labels_file: dataset_fused/labels_masked.csv
+  split_file: dataset_fused/split_source_aware.csv
   image_size: [224, 224]
   window_hours: 24
   preserve_aspect_ratio: true
   train_augmentation: true
   strict_time_alignment: true
   require_device_id: false
-  require_task_masks: false
+  require_task_masks: true
   environment_fields:
     - temperature
     - soil_humidity
     - light
     - ph
   optional_environment_fields: []
-  # Calculated only from environment rows used by the training split.
   environment_normalization: auto
   splits:
     train: train
@@ -47,7 +42,7 @@ model:
 
 training:
   epochs: 30
-  batch_size: 4
+  batch_size: 16
   learning_rate: 0.0001
   weight_decay: 0.0001
   num_workers: 0
@@ -67,8 +62,8 @@ loss:
     abnormal_alert: 1.0
 
 outputs:
-  checkpoint_dir: checkpoints/enhanced_multimodal
-  best_checkpoint: checkpoints/enhanced_multimodal/best_model.pth
-  last_checkpoint: checkpoints/enhanced_multimodal/last_model.pth
-  evaluation_dir: outputs/enhanced_multimodal
-  experiment_dir: experiments/enhanced_multimodal
+  checkpoint_dir: checkpoints/enhanced_fused_multimodal
+  best_checkpoint: checkpoints/enhanced_fused_multimodal/best_model.pth
+  last_checkpoint: checkpoints/enhanced_fused_multimodal/last_model.pth
+  evaluation_dir: outputs/enhanced_fused_multimodal
+  experiment_dir: experiments/enhanced_fused_multimodal

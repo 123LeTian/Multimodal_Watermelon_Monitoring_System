@@ -1,0 +1,77 @@
+project:
+  name: watermelon_reviewed_multimodal_v3
+  description: Source-isolated fine-tuning with visually reviewed health severity labels
+  seed: 42
+
+data:
+  dataset_dir: dataset_fused
+  labels_file: dataset_fused/labels_reviewed_v3.csv
+  split_file: dataset_fused/split_source_isolated_v3.csv
+  image_size: [224, 224]
+  window_hours: 24
+  preserve_aspect_ratio: true
+  train_augmentation: true
+  strict_time_alignment: true
+  require_device_id: false
+  require_task_masks: true
+  environment_fields:
+    - temperature
+    - soil_humidity
+    - light
+    - ph
+  optional_environment_fields: []
+  environment_normalization: auto
+  splits:
+    train: train
+    validation: val
+    test: test
+
+model:
+  input_mode: multimodal
+  image_backbone: resnet50
+  image_pretrained: false
+  environment_encoder: transformer
+  sensor_dim: 4
+  time_feature_dim: 1
+  use_sensor_mask: true
+  output_tasks:
+    growth_stage: 6
+    health_level: 4
+    maturity_level: 4
+    abnormal_alert: 2
+
+training:
+  epochs: 15
+  batch_size: 16
+  learning_rate: 0.00001
+  weight_decay: 0.0001
+  num_workers: 0
+  device: auto
+  grad_clip_norm: 1.0
+  scheduler: cosine
+  min_learning_rate: 0.0000005
+  early_stopping_patience: 5
+  initial_checkpoint: checkpoints/enhanced_fused_v2/best_model.pth
+  selection_metric: weighted_macro_f1
+  selection_metric_weights:
+    health_level: 0.6
+    maturity_level: 0.1
+    abnormal_alert: 0.3
+
+loss:
+  type: cross_entropy
+  label_smoothing: 0.05
+  task_weights:
+    growth_stage: 0.0
+    health_level: 2.0
+    maturity_level: 0.5
+    abnormal_alert: 1.0
+  class_weights:
+    health_level: [0.84, 2.0, 0.67, 1.12]
+
+outputs:
+  checkpoint_dir: checkpoints/reviewed_v3
+  best_checkpoint: checkpoints/reviewed_v3/best_model.pth
+  last_checkpoint: checkpoints/reviewed_v3/last_model.pth
+  evaluation_dir: outputs/reviewed_v3
+  experiment_dir: experiments/reviewed_v3

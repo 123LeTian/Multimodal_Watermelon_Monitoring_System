@@ -28,6 +28,7 @@ class MultiTaskLoss(nn.Module):
     def __init__(
         self,
         task_weights: Mapping[str, float] | None = None,
+        class_weights: Mapping[str, list[float]] | None = None,
         label_smoothing: float = 0.0,
     ) -> None:
         super().__init__()
@@ -46,10 +47,29 @@ class MultiTaskLoss(nn.Module):
         if not 0.0 <= label_smoothing < 1.0:
             raise ValueError("label_smoothing must be in [0, 1)")
 
+        configured_class_weights = dict(class_weights or {})
+        unknown_class_weight_tasks = set(configured_class_weights) - set(TASK_NAMES)
+        if unknown_class_weight_tasks:
+            raise ValueError(
+                f"unknown class weight tasks: {sorted(unknown_class_weight_tasks)}"
+            )
+        for task, values in configured_class_weights.items():
+            if not values:
+                raise ValueError(f"class weights for {task} must not be empty")
+            if any(float(value) <= 0 for value in values):
+                raise ValueError(f"class weights for {task} must be positive")
+
         self.task_weights = weights
         self.criteria = nn.ModuleDict(
             {
-                task: nn.CrossEntropyLoss(label_smoothing=label_smoothing)
+                task: nn.CrossEntropyLoss(
+                    weight=(
+                        torch.tensor(configured_class_weights[task], dtype=torch.float32)
+                        if task in configured_class_weights
+                        else None
+                    ),
+                    label_smoothing=label_smoothing,
+                )
                 for task in TASK_NAMES
             }
         )
@@ -132,8 +152,12 @@ def calculate_multitask_loss(
     labels: Mapping[str, torch.Tensor],
     task_masks: Mapping[str, torch.Tensor] | None = None,
     task_weights: Mapping[str, float] | None = None,
+    class_weights: Mapping[str, list[float]] | None = None,
 ) -> tuple[torch.Tensor, dict[str, torch.Tensor]]:
     """Convenience function returning total and per-task losses."""
-    criterion = MultiTaskLoss(task_weights=task_weights)
+    criterion = MultiTaskLoss(
+        task_weights=task_weights,
+        class_weights=class_weights,
+    )
     total_loss, details = criterion(outputs, labels, task_masks=task_masks, return_details=True)
     return total_loss, details

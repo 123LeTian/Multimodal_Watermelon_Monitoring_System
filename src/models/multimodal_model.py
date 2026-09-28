@@ -54,9 +54,12 @@ class EnvironmentTransformerEncoder(nn.Module):
         num_heads: int = 4,
         num_layers: int = 2,
         dropout: float = 0.1,
+        use_sensor_mask: bool = False,
     ) -> None:
         super().__init__()
-        self.input_projection = nn.Linear(sensor_dim + time_dim, model_dim)
+        self.use_sensor_mask = use_sensor_mask
+        sensor_input_dim = sensor_dim * (2 if use_sensor_mask else 1)
+        self.input_projection = nn.Linear(sensor_input_dim + time_dim, model_dim)
         encoder_layer = nn.TransformerEncoderLayer(
             d_model=model_dim,
             nhead=num_heads,
@@ -81,8 +84,19 @@ class EnvironmentTransformerEncoder(nn.Module):
         environment: torch.Tensor,
         time_offsets: torch.Tensor,
         environment_mask: torch.Tensor,
+        environment_sensor_mask: torch.Tensor | None = None,
     ) -> torch.Tensor:
-        inputs = torch.cat([environment, time_offsets], dim=-1)
+        features = [environment]
+        if self.use_sensor_mask:
+            if environment_sensor_mask is None:
+                environment_sensor_mask = torch.ones_like(environment)
+            if environment_sensor_mask.shape != environment.shape:
+                raise ValueError(
+                    "environment_sensor_mask must have the same shape as environment"
+                )
+            features.append(environment_sensor_mask.to(environment.dtype))
+        features.append(time_offsets)
+        inputs = torch.cat(features, dim=-1)
         inputs = self.input_projection(inputs)
 
         padding_mask = ~environment_mask
@@ -109,6 +123,7 @@ class MultimodalWatermelonModel(nn.Module):
         time_dim: int = 1,
         image_pretrained: bool = False,
         input_mode: str = "multimodal",
+        use_sensor_mask: bool = False,
     ) -> None:
         super().__init__()
         if input_mode not in VALID_INPUT_MODES:
@@ -133,6 +148,7 @@ class MultimodalWatermelonModel(nn.Module):
                 sensor_dim=sensor_dim,
                 time_dim=time_dim,
                 output_dim=environment_feature_dim,
+                use_sensor_mask=use_sensor_mask,
             )
             fusion_input_dim += environment_feature_dim
 
@@ -164,6 +180,7 @@ class MultimodalWatermelonModel(nn.Module):
         environment: torch.Tensor,
         time_offsets: torch.Tensor,
         environment_mask: torch.Tensor,
+        environment_sensor_mask: torch.Tensor | None = None,
     ) -> dict[str, torch.Tensor]:
         features = []
         if self.uses_image:
@@ -178,6 +195,7 @@ class MultimodalWatermelonModel(nn.Module):
                     environment=environment,
                     time_offsets=time_offsets,
                     environment_mask=environment_mask,
+                    environment_sensor_mask=environment_sensor_mask,
                 )
             )
 

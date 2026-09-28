@@ -1,0 +1,77 @@
+{
+  "reviewed_samples": 634,
+  "decision_counts": {
+    "invalid": 153,
+    "moderate": 77,
+    "severe": 273,
+    "mild": 131
+  },
+  "changed_health_labels": 404,
+  "invalidated_health_labels": 153,
+  "source_splits": {
+    "watermelon_disease_recognition": "train",
+    "watermelon_ripe_semiripe_unripe": "train",
+    "kurdistan_watermelon_disease": "val",
+    "watermelon_ripe_unripe": "val",
+    "fruq_db": "test"
+  },
+  "split_counts": {
+    "test": 2400,
+    "train": 3263,
+    "val": 4337
+  },
+  "valid_label_counts": {
+    "test": {
+      "health_level": {
+        "0": 800,
+        "1": 800,
+        "3": 800
+      },
+      "maturity_level": {
+        "1": 800,
+        "2": 800,
+        "3": 800
+      },
+      "abnormal_alert": {
+        "0": 800,
+        "1": 1600
+      }
+    },
+    "train": {
+      "maturity_level": {
+        "0": 1274,
+        "2": 608
+      },
+      "health_level": {
+        "0": 366,
+        "1": 131,
+        "2": 458,
+        "3": 273
+      },
+      "abnormal_alert": {
+        "0": 366,
+        "1": 1015
+      }
+    },
+    "val": {
+      "maturity_level": {
+        "0": 526,
+        "2": 1192
+      },
+      "health_level": {
+        "0": 834,
+        "1": 800,
+        "2": 985
+      },
+      "abnormal_alert": {
+        "0": 834,
+        "1": 1785
+      }
+    }
+  },
+  "outputs": {
+    "labels": "dataset_fused\\labels_reviewed_v3.csv",
+    "split": "dataset_fused\\split_source_isolated_v3.csv",
+    "reviewed_queue": "experiments\\health_severity_review_v3\\health_review_completed.csv"
+  }
+}

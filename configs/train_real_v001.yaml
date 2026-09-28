@@ -1,22 +1,20 @@
-# Watermelon multimodal model training configuration.
-#
-# scripts/train.py reads this file when called with --config. Command-line
-# arguments override values from this file.
+# Real greenhouse fine-tuning/training configuration.
+# Fill dataset_real_v001 with audited real data before using this config.
 
 project:
-  name: watermelon_multimodal_monitoring
-  description: ResNet50 + Transformer multi-task classification model
+  name: watermelon_real_v001_multimodal
+  description: Real greenhouse watermelon multimodal four-task model
   seed: 42
 
 data:
-  dataset_dir: dataset_sample
-  split_file: null
+  dataset_dir: dataset_real_v001
+  split_file: dataset_real_v001/split.csv
   image_size: [224, 224]
   window_hours: 24
   preserve_aspect_ratio: true
   train_augmentation: true
   strict_time_alignment: true
-  require_device_id: false
+  require_device_id: true
   require_task_masks: false
   environment_fields:
     - temperature
@@ -24,7 +22,6 @@ data:
     - light
     - ph
   optional_environment_fields: []
-  # Calculated only from environment rows used by the training split.
   environment_normalization: auto
   splits:
     train: train
@@ -47,28 +44,28 @@ model:
 
 training:
   epochs: 30
-  batch_size: 4
-  learning_rate: 0.0001
+  batch_size: 8
+  learning_rate: 0.00005
   weight_decay: 0.0001
   num_workers: 0
   device: auto
   grad_clip_norm: 1.0
   scheduler: cosine
   min_learning_rate: 0.000001
-  early_stopping_patience: 5
+  early_stopping_patience: 7
 
 loss:
   type: cross_entropy
-  label_smoothing: 0.05
+  label_smoothing: 0.03
   task_weights:
     growth_stage: 1.0
-    health_level: 1.0
+    health_level: 1.2
     maturity_level: 1.0
-    abnormal_alert: 1.0
+    abnormal_alert: 1.2
 
 outputs:
-  checkpoint_dir: checkpoints/enhanced_multimodal
-  best_checkpoint: checkpoints/enhanced_multimodal/best_model.pth
-  last_checkpoint: checkpoints/enhanced_multimodal/last_model.pth
-  evaluation_dir: outputs/enhanced_multimodal
-  experiment_dir: experiments/enhanced_multimodal
+  checkpoint_dir: checkpoints/real_v001
+  best_checkpoint: checkpoints/real_v001/best_model.pth
+  last_checkpoint: checkpoints/real_v001/last_model.pth
+  evaluation_dir: outputs/real_v001
+  experiment_dir: experiments/real_v001
